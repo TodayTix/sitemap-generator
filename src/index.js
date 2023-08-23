@@ -403,6 +403,10 @@ module.exports = function SitemapGenerator(uri, opts) {
     crawler.on('fetchprevented', ({
       url
     }) => emitError(403, url));
+    crawler.on('fetchredirect', ({url}) => {
+      emitError(301, url)
+      return;
+    })
 
     crawler.on('queueerror', ({
       url
