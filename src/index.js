@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const parseURL = require('url-parse');
+// const cpFile = require('cp-file'); // ❌ ESM-only, remove
 const normalizeUrl = require('normalize-url');
 const eachSeries = require('async/eachSeries');
 const mitt = require('mitt');
