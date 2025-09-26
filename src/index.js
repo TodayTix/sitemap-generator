@@ -1,6 +1,4 @@
 const fs = require('fs');
-const http = require('follow-redirects').http;
-const https = require('follow-redirects').https;
 const path = require('path');
 const parseURL = require('url-parse');
 const cpFile = require('cp-file');
@@ -9,6 +7,7 @@ const eachSeries = require('async/eachSeries');
 const mitt = require('mitt');
 const async = require('async');
 const puppeteer = require('puppeteer');
+const got = require('got');
 const discoverResources = require('./discoverResources');
 
 const createCrawler = require('./createCrawler');
@@ -175,7 +174,7 @@ module.exports = function SitemapGenerator(uri, opts) {
     isEmittedBefore[code][url] = true;
     emitter.emit('error', {
       code,
-      message: http.STATUS_CODES[code],
+      message: got.HTTPError.message,
       url
     });
   };
