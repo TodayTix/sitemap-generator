@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const parseURL = require('url-parse');
-const cpFile = require('cp-file');
 const normalizeUrl = require('normalize-url');
 const eachSeries = require('async/eachSeries');
 const mitt = require('mitt');
@@ -19,6 +18,13 @@ const getLangCodeMap = require('./helpers/getLangCodeMap');
 const isValidURL = require('./helpers/isValidURL');
 const msg = require('./helpers/msg-helper');
 const getCurrentDateTime = require('./helpers/getCurrentDateTime');
+
+const fsp = fs.promises;
+// Minimal replacement for cp-file that also creates the destination directory
+async function copy(src, dest) {
+  await fsp.mkdir(path.dirname(dest), { recursive: true });
+  await fsp.copyFile(src, dest);
+}
 
 module.exports = function SitemapGenerator(uri, opts) {
   let browser = null;
@@ -80,10 +86,10 @@ module.exports = function SitemapGenerator(uri, opts) {
       if (!similarLangAlternatives.length && !similarURLAlternatives.length) {
         to.alternatives.push(fromAlter);
       } else if (similarURLAlternatives.length && !similarLangAlternatives.length) {
-        //en and en-US. In this case the more specific lang should be used en-US
+        // en and en-US. Prefer the more specific lang
         similarURLAlternatives[0].lang = similarURLAlternatives[0].lang.length > fromAlter.lang.length ? similarURLAlternatives[0].lang : fromAlter.lang;
       } else if (similarLangAlternatives.length && !similarURLAlternatives.length) {
-        //Same langs detected but diffrent URLs, In this case will always prefer the from's one
+        // Same lang detected but different URLs. Prefer the `from` one
         similarLangAlternatives[0].url = fromAlter.url;
         similarLangAlternatives[0].urlNormalized = normalizeUrl(fromAlter.url, {
           removeTrailingSlash: false,
@@ -174,7 +180,7 @@ module.exports = function SitemapGenerator(uri, opts) {
     isEmittedBefore[code][url] = true;
     emitter.emit('error', {
       code,
-      message: got.HTTPError.message,
+      message: got.HTTPError && got.HTTPError.message,
       url
     });
   };
@@ -249,7 +255,7 @@ module.exports = function SitemapGenerator(uri, opts) {
         }
 
         let isSelfRefrencingAlternativeAddedBefore = queueItem.alternatives.filter(function(alter) {
-          //IF THE URL WAS ADDED BEFORE OR THERE IS ANOTHER ONE FOR THIS LANG
+          // IF THE URL WAS ADDED BEFORE OR THERE IS ANOTHER ONE FOR THIS LANG
           return (alter.urlNormalized === queueItem.urlNormalized) || alter.lang === queueItem.lang;
         }).length;
         if (queueItem.alternatives.length === 0 || isSelfRefrencingAlternativeAddedBefore) {
@@ -271,7 +277,7 @@ module.exports = function SitemapGenerator(uri, opts) {
     const handleCanonicals = () => {
       msg.info('HANDLING CANONICAL URLS');
       for (let queueItem of queuedItems) {
-        //CHECK IF CANONICAL ALREADY IN THE QUEUE
+        // CHECK IF CANONICAL ALREADY IN THE QUEUE
         const canonicalItem = queuedItems.filter((item) => {
           return queueItem.canonical === item.url && queueItem.id !== item.id;
         })[0];
@@ -284,13 +290,11 @@ module.exports = function SitemapGenerator(uri, opts) {
     const handleUppercaseLettersURLs = () => {
       msg.info('HANDLING SIMILAR URLS BUT WITH DIFFERENT CASE LETTERS');
       for (let queueItem of queuedItems) {
-        //CHECK IF CANONICAL ALREADY IN THE QUEUE
         const otherQueueItem = queuedItems.filter((item) => {
           return queueItem.url.toLowerCase() === item.url.toLowerCase() &&
             queueItem.id !== item.id;
         })[0];
 
-        //THERE IS AN UPPER CASE LETTER
         if (otherQueueItem && (otherQueueItem.url.toLowerCase() !== otherQueueItem.url)) {
           mergeQueueItems(queueItem, otherQueueItem, true);
           queueItem.shouldBeDelete = true;
@@ -320,7 +324,7 @@ module.exports = function SitemapGenerator(uri, opts) {
               savedOnDiskSitemapPaths.push(newPath);
               // copy and remove tmp file
               (async () => {
-                await cpFile(tmpPath, newPath);
+                await copy(tmpPath, newPath); // ✅ replaced cp-file
                 fs.unlink(tmpPath, () => {
                   done();
                 });
@@ -343,7 +347,7 @@ module.exports = function SitemapGenerator(uri, opts) {
 
           (async () => {
             msg.green('SITEMAP GENERATED ON: ' + sitemaps[0]);
-            await cpFile(sitemaps[0], sitemapPath);
+            await copy(sitemaps[0], sitemapPath); // ✅ replaced cp-file
             msg.green('MOVING SITEMAP TO THE TARGET DIR: ' + sitemapPath);
             fs.unlink(sitemaps[0], cb);
           })();
@@ -370,7 +374,7 @@ module.exports = function SitemapGenerator(uri, opts) {
       }
       sitemap.flush();
       // Wait extra 10 seconds to make sure that sitemaps been saved on disk
-      //TODO: Refactor
+      // TODO: Refactor
       setTimeout(finish, 10000);
     };
 
@@ -387,32 +391,18 @@ module.exports = function SitemapGenerator(uri, opts) {
     }
     crawler = createCrawler(parsedUrl, options, browser);
 
-    crawler.on('fetch404', ({
-      url
-    }) => emitError(404, url));
-    crawler.on('fetchtimeout', ({
-      url
-    }) => emitError(408, url));
-    crawler.on('fetch410', ({
-      url
-    }) => emitError(410, url));
-    crawler.on('invaliddomain', ({
-      url
-    }) => emitError(403, url));
-    crawler.on('fetchprevented', ({
-      url
-    }) => emitError(403, url));
-    crawler.on('fetchredirect', ({url}) => {
-      emitError(301, url)
+    crawler.on('fetch404', ({ url }) => emitError(404, url));
+    crawler.on('fetchtimeout', ({ url }) => emitError(408, url));
+    crawler.on('fetch410', ({ url }) => emitError(410, url));
+    crawler.on('invaliddomain', ({ url }) => emitError(403, url));
+    crawler.on('fetchprevented', ({ url }) => emitError(403, url));
+    crawler.on('fetchredirect', ({ url }) => {
+      emitError(301, url);
       return;
-    })
+    });
 
-    crawler.on('queueerror', ({
-      url
-    }) => emitError(500, url));
-    crawler.on('fetchconditionerror', ({
-      url
-    }) => emitError(500, url));
+    crawler.on('queueerror', ({ url }) => emitError(500, url));
+    crawler.on('fetchconditionerror', ({ url }) => emitError(500, url));
 
     crawler.on('fetcherror', (queueItem, response) =>
       emitError(response.statusCode, queueItem.url)
@@ -426,9 +416,7 @@ module.exports = function SitemapGenerator(uri, opts) {
       }
     });
 
-    crawler.on('fetchdisallowed', ({
-      url
-    }) => emitter.emit('ignore', url));
+    crawler.on('fetchdisallowed', ({ url }) => emitter.emit('ignore', url));
 
     crawler.on('queueduplicate', (queueItem) => {
       const items = crawler.queue.filter((item) => {
@@ -450,10 +438,7 @@ module.exports = function SitemapGenerator(uri, opts) {
     });
 
     crawler.on('fetchcomplete', (queueItem, page) => {
-      const {
-        url,
-        depth
-      } = queueItem;
+      const { url, depth } = queueItem;
       // msg.info('FETCH COMPLETE FOR ' + url);
       // check if robots noindex is present
       if (/<meta(?=[^>]+noindex).*?>/.test(page)) {
