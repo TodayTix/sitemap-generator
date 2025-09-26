@@ -1,12 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const parseURL = require('url-parse');
-// const cpFile = require('cp-file'); // removed (ESM-only)
 const eachSeries = require('async/eachSeries');
-const mitt = require('mitt');
+const { EventEmitter } = require('events'); // ✅ replaces mitt
 const async = require('async');
-const puppeteer = require('puppeteer');
-const got = require('got');
+// const puppeteer = require('puppeteer'); // ❌ ESM-only, load dynamically when needed
+// const got = require('got'); // ❌ not needed; avoid ESM import
 const discoverResources = require('./discoverResources');
 
 const createCrawler = require('./createCrawler');
@@ -41,7 +40,6 @@ function normalize(input, opts = {}) {
     stripWWW = true,
   } = opts;
 
-  // Handle inputs without protocol by assuming http
   let href = String(input || '');
   if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(href)) {
     href = 'http://' + href;
@@ -51,7 +49,6 @@ function normalize(input, opts = {}) {
   try {
     u = new URL(href);
   } catch (_) {
-    // Fallback: return original if URL constructor chokes
     return String(input || '');
   }
 
@@ -78,7 +75,6 @@ function normalize(input, opts = {}) {
   // Collapse duplicate slashes in pathname
   u.pathname = u.pathname.replace(/\/{2,}/g, '/');
 
-  // Keep search and hash as-is
   return u.toString();
 }
 
@@ -118,12 +114,14 @@ module.exports = function SitemapGenerator(uri, opts) {
     ignore: 0,
     error: 0
   };
+
   const getQueueReadyItems = () => {
     const items = crawler.queue.filter((item) => {
       return item.visited && item.isDiscoveryProcessDone && item.fetched === true;
     });
     return items;
   };
+
   const mergeQueueItems = (from, to, deep) => {
     to.depth = to.depth > from.depth ? from.depth : to.depth;
     to.lastMod = to.lastMod === '' ? from.lastMod : to.lastMod;
@@ -154,6 +152,7 @@ module.exports = function SitemapGenerator(uri, opts) {
       }
     }
   };
+
   const getStats = () => {
     let queuedItems = getQueueReadyItems();
     queuedItems = queuedItems.map((item) => {
@@ -180,16 +179,17 @@ module.exports = function SitemapGenerator(uri, opts) {
     };
     return results;
   };
+
   const getPaths = () => {
     return savedOnDiskSitemapPaths;
   };
 
-  // if changeFreq option was passed, check to see if the value is valid
+  // Validate changeFreq if provided
   if (opts && opts.changeFreq) {
     options.changeFreq = validChangeFreq(opts.changeFreq);
   }
 
-  const emitter = mitt();
+  const emitter = new EventEmitter(); // ✅ replaces mitt
 
   const parsedUrl = parseURL(
     normalize(uri, {
@@ -225,18 +225,17 @@ module.exports = function SitemapGenerator(uri, opts) {
       msg.info('NEW ITEM ADDED TO THE QUEUE MANUALLY: ' + url);
     }
   };
+
   // create sitemap stream
   const sitemap = SitemapRotator(options);
   const isEmittedBefore = {};
-  const emitError = (code, url) => {
+  const emitError = (code, url, message) => {
     isEmittedBefore[code] = isEmittedBefore[code] ? isEmittedBefore[code] : {};
-    if (isEmittedBefore[code][url]) {
-      return;
-    }
+    if (isEmittedBefore[code][url]) return;
     isEmittedBefore[code][url] = true;
     emitter.emit('error', {
       code,
-      message: got.HTTPError && got.HTTPError.message,
+      message: message || String(code),
       url
     });
   };
@@ -244,6 +243,7 @@ module.exports = function SitemapGenerator(uri, opts) {
   const onCrawlerComplete = () => {
     let queuedItems = getQueueReadyItems();
     msg.green('CRAWLER HAS ' + queuedItems.length + ' ITEMS IN THE QUEUE');
+
     const addBaseURLsToQueue = () => {
       msg.info('ADDING BASE URLS TO THE GENERATED SITEMAP');
       for (const url of options.forcedURLs) {
@@ -274,6 +274,7 @@ module.exports = function SitemapGenerator(uri, opts) {
         }
       }
     };
+
     const getLangFreeURL = (queueItem) => {
       const langs = getLangCodeMap(queueItem.lang);
       let pureURL = queueItem.url;
@@ -282,6 +283,7 @@ module.exports = function SitemapGenerator(uri, opts) {
       }
       return pureURL;
     };
+
     const recommendAlternatives = () => {
       msg.info('RECOMMENDING ALTERNATIVES');
       for (let queueItem of queuedItems) {
@@ -292,7 +294,7 @@ module.exports = function SitemapGenerator(uri, opts) {
             continue;
           }
 
-          let isAlternativeAddedBefore = queueItem.alternatives.filter(function(alter) {
+          let isAlternativeAddedBefore = queueItem.alternatives.filter(function (alter) {
             return (alter.urlNormalized === otherQueueItem.urlNormalized) || alter.lang === otherQueueItem.lang;
           }).length;
 
@@ -310,7 +312,7 @@ module.exports = function SitemapGenerator(uri, opts) {
           });
         }
 
-        let isSelfRefrencingAlternativeAddedBefore = queueItem.alternatives.filter(function(alter) {
+        let isSelfRefrencingAlternativeAddedBefore = queueItem.alternatives.filter(function (alter) {
           // IF THE URL WAS ADDED BEFORE OR THERE IS ANOTHER ONE FOR THIS LANG
           return (alter.urlNormalized === queueItem.urlNormalized) || alter.lang === queueItem.lang;
         }).length;
@@ -343,6 +345,7 @@ module.exports = function SitemapGenerator(uri, opts) {
         }
       }
     };
+
     const handleUppercaseLettersURLs = () => {
       msg.info('HANDLING SIMILAR URLS BUT WITH DIFFERENT CASE LETTERS');
       for (let queueItem of queuedItems) {
@@ -360,6 +363,7 @@ module.exports = function SitemapGenerator(uri, opts) {
         }
       }
     };
+
     const init = () => {
       msg.green('CRAWLER COMPLETE CRAWLING THE WEBSITE');
       const finish = () => {
@@ -440,6 +444,9 @@ module.exports = function SitemapGenerator(uri, opts) {
 
   const init = async () => {
     if (options.deep) {
+      // ✅ dynamically import ESM-only puppeteer when needed
+      const puppeteerMod = await import('puppeteer');
+      const puppeteer = puppeteerMod.default || puppeteerMod;
       browser = await puppeteer.launch({
         headless: true,
         args: ['--lang=en-US,us']
@@ -495,7 +502,6 @@ module.exports = function SitemapGenerator(uri, opts) {
 
     crawler.on('fetchcomplete', (queueItem, page) => {
       const { url, depth } = queueItem;
-      // msg.info('FETCH COMPLETE FOR ' + url);
       // check if robots noindex is present
       if (/<meta(?=[^>]+noindex).*?>/.test(page)) {
         emitter.emit('ignore', queueItem);
@@ -505,7 +511,6 @@ module.exports = function SitemapGenerator(uri, opts) {
       } else {
         emitError('404', url);
       }
-
     });
 
     crawler.on('discoverycomplete', (queueItem, resources) => {});
@@ -521,6 +526,7 @@ module.exports = function SitemapGenerator(uri, opts) {
       stats.error++;
     });
   };
+
   (async () => {
     await init();
     emitter.emit('ready');
@@ -531,8 +537,8 @@ module.exports = function SitemapGenerator(uri, opts) {
     start,
     stop,
     queueURL,
-    on: emitter.on,
-    off: emitter.off,
+    on: emitter.on.bind(emitter),
+    off: emitter.off ? emitter.off.bind(emitter) : emitter.removeListener.bind(emitter),
     getPaths
   };
 };
