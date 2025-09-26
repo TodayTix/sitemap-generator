@@ -1,8 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const parseURL = require('url-parse');
-// const cpFile = require('cp-file'); // ❌ ESM-only, remove
-const normalizeUrl = require('normalize-url');
+// const cpFile = require('cp-file'); // removed (ESM-only)
 const eachSeries = require('async/eachSeries');
 const mitt = require('mitt');
 const async = require('async');
@@ -21,10 +20,66 @@ const msg = require('./helpers/msg-helper');
 const getCurrentDateTime = require('./helpers/getCurrentDateTime');
 
 const fsp = fs.promises;
+
 // Minimal replacement for cp-file that also creates the destination directory
 async function copy(src, dest) {
   await fsp.mkdir(path.dirname(dest), { recursive: true });
   await fsp.copyFile(src, dest);
+}
+
+/**
+ * Lightweight URL normalizer covering the options used in this file.
+ * Options:
+ *  - removeTrailingSlash: boolean (default false)
+ *  - forceHttps: boolean (default false)
+ *  - stripWWW: boolean (default true)
+ */
+function normalize(input, opts = {}) {
+  const {
+    removeTrailingSlash = false,
+    forceHttps = false,
+    stripWWW = true,
+  } = opts;
+
+  // Handle inputs without protocol by assuming http
+  let href = String(input || '');
+  if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(href)) {
+    href = 'http://' + href;
+  }
+
+  let u;
+  try {
+    u = new URL(href);
+  } catch (_) {
+    // Fallback: return original if URL constructor chokes
+    return String(input || '');
+  }
+
+  if (forceHttps) u.protocol = 'https:';
+
+  // Lowercase host
+  u.hostname = u.hostname.toLowerCase();
+
+  if (stripWWW && u.hostname.startsWith('www.')) {
+    u.hostname = u.hostname.slice(4);
+  }
+
+  // Normalize default ports
+  if ((u.protocol === 'http:' && u.port === '80') || (u.protocol === 'https:' && u.port === '443')) {
+    u.port = '';
+  }
+
+  // Clean up pathname
+  if (removeTrailingSlash && u.pathname !== '/' && u.pathname.endsWith('/')) {
+    u.pathname = u.pathname.replace(/\/+$/, '');
+    if (u.pathname === '') u.pathname = '/';
+  }
+
+  // Collapse duplicate slashes in pathname
+  u.pathname = u.pathname.replace(/\/{2,}/g, '/');
+
+  // Keep search and hash as-is
+  return u.toString();
 }
 
 module.exports = function SitemapGenerator(uri, opts) {
@@ -92,7 +147,7 @@ module.exports = function SitemapGenerator(uri, opts) {
       } else if (similarLangAlternatives.length && !similarURLAlternatives.length) {
         // Same lang detected but different URLs. Prefer the `from` one
         similarLangAlternatives[0].url = fromAlter.url;
-        similarLangAlternatives[0].urlNormalized = normalizeUrl(fromAlter.url, {
+        similarLangAlternatives[0].urlNormalized = normalize(fromAlter.url, {
           removeTrailingSlash: false,
           forceHttps: true
         });
@@ -137,7 +192,7 @@ module.exports = function SitemapGenerator(uri, opts) {
   const emitter = mitt();
 
   const parsedUrl = parseURL(
-    normalizeUrl(uri, {
+    normalize(uri, {
       stripWWW: false,
       removeTrailingSlash: false
     })
@@ -196,14 +251,14 @@ module.exports = function SitemapGenerator(uri, opts) {
           depth: 100,
           lastMod: '',
           url: url.value,
-          urlNormalized: normalizeUrl(url.value, {
+          urlNormalized: normalize(url.value, {
             removeTrailingSlash: false,
             forceHttps: true
           })
         };
         item.alternatives = url.alternatives.map((alter) => {
           alter.url = alter.value;
-          alter.urlNormalized = normalizeUrl(alter.url, {
+          alter.urlNormalized = normalize(alter.url, {
             removeTrailingSlash: false,
             forceHttps: true
           });
@@ -246,7 +301,7 @@ module.exports = function SitemapGenerator(uri, opts) {
           }
           queueItem.alternatives.push({
             url: otherQueueItem.url,
-            urlNormalized: normalizeUrl(otherQueueItem.url, {
+            urlNormalized: normalize(otherQueueItem.url, {
               removeTrailingSlash: false,
               forceHttps: true
             }),
@@ -265,7 +320,7 @@ module.exports = function SitemapGenerator(uri, opts) {
 
         queueItem.alternatives.push({
           url: queueItem.url,
-          urlNormalized: normalizeUrl(queueItem.url, {
+          urlNormalized: normalize(queueItem.url, {
             removeTrailingSlash: false,
             forceHttps: true
           }),
@@ -325,7 +380,7 @@ module.exports = function SitemapGenerator(uri, opts) {
               savedOnDiskSitemapPaths.push(newPath);
               // copy and remove tmp file
               (async () => {
-                await copy(tmpPath, newPath); // ✅ replaced cp-file
+                await copy(tmpPath, newPath);
                 fs.unlink(tmpPath, () => {
                   done();
                 });
@@ -348,7 +403,7 @@ module.exports = function SitemapGenerator(uri, opts) {
 
           (async () => {
             msg.green('SITEMAP GENERATED ON: ' + sitemaps[0]);
-            await copy(sitemaps[0], sitemapPath); // ✅ replaced cp-file
+            await copy(sitemaps[0], sitemapPath);
             msg.green('MOVING SITEMAP TO THE TARGET DIR: ' + sitemapPath);
             fs.unlink(sitemaps[0], cb);
           })();
