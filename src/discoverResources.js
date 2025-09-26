@@ -1,12 +1,64 @@
 const url = require('url');
 const cheerio = require('cheerio');
 const superagent = require('superagent-interface-promise');
-const normalizeUrl = require('normalize-url');
+// const normalizeUrl = require('normalize-url'); // ❌ removed (ESM-only)
 const cld = require('cld');
 const msg = require('./helpers/msg-helper');
 
 let browser = null;
 let crawler = null;
+
+/**
+ * Lightweight URL normalizer covering the options used in this file.
+ * Options:
+ *  - removeTrailingSlash: boolean (default false)
+ *  - forceHttps: boolean (default false)
+ *  - stripWWW: boolean (default true)
+ */
+function normalize(input, opts = {}) {
+  const {
+    removeTrailingSlash = false,
+    forceHttps = false,
+    stripWWW = true,
+  } = opts;
+
+  let href = String(input || '');
+  if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(href)) {
+    href = 'http://' + href;
+  }
+
+  let u;
+  try {
+    u = new URL(href);
+  } catch (_) {
+    return String(input || '');
+  }
+
+  if (forceHttps) u.protocol = 'https:';
+
+  // Lowercase host
+  u.hostname = u.hostname.toLowerCase();
+
+  if (stripWWW && u.hostname.startsWith('www.')) {
+    u.hostname = u.hostname.slice(4);
+  }
+
+  // Normalize default ports
+  if ((u.protocol === 'http:' && u.port === '80') || (u.protocol === 'https:' && u.port === '443')) {
+    u.port = '';
+  }
+
+  // Clean up pathname
+  if (removeTrailingSlash && u.pathname !== '/' && u.pathname.endsWith('/')) {
+    u.pathname = u.pathname.replace(/\/+$/, '');
+    if (u.pathname === '') u.pathname = '/';
+  }
+
+  // Collapse duplicate slashes in pathname
+  u.pathname = u.pathname.replace(/\/{2,}/g, '/');
+
+  return u.toString();
+}
 
 const guessItemLanguage = (queueItem) => {
   const $ = queueItem.$;
@@ -15,24 +67,23 @@ const guessItemLanguage = (queueItem) => {
     if (lang !== '') {
       resolve(lang);
     } else {
-      cld.detect(html, {
-        isHTML: true
-      }, function(err, result) {
+      cld.detect(queueItem.plainHTML || '', { isHTML: true }, function(err, result) {
         if (err) {
-          reject(err);
+          return reject(err);
         }
-        lang = result.languages[0].code;
+        lang = result && result.languages && result.languages[0] && result.languages[0].code
+          ? result.languages[0].code
+          : '';
         resolve(lang);
       });
     }
   };
-  let promise = new Promise(init);
-  return promise;
+  return new Promise(init);
 };
 
 const discoverWithCheerio = (buffer, queueItem) => {
 
-  queueItem.urlNormalized = normalizeUrl(queueItem.url, {
+  queueItem.urlNormalized = normalize(queueItem.url, {
     removeTrailingSlash: false,
     forceHttps: true
   });
@@ -57,23 +108,23 @@ const discoverWithCheerio = (buffer, queueItem) => {
     try {
       let hreflang = $(this).attr('hreflang');
       let type = $(this).attr('type');
-      let hreflangUrl = $(this).attr('href').replace('\n', '').trim();
+      let hreflangUrl = ($(this).attr('href') || '').replace('\n', '').trim();
 
       if (type === 'application/rss+xml') {
         return;
       }
 
-      if (hreflangUrl !== '' && queueItem.urlNormalized === normalizeUrl(hreflangUrl, {
+      if (hreflangUrl !== '' && queueItem.urlNormalized === normalize(hreflangUrl, {
           removeTrailingSlash: false,
           forceHttps: true
         })) {
-        // Update the original URL by it's main language
+        // Update the original URL by its main language
         queueItem.lang = hreflang;
       }
       if (typeof hreflang !== typeof undefined && hreflang !== false && hreflangUrl !== '') {
         queueItem.alternatives.push({
           url: hreflangUrl,
-          urlNormalized: normalizeUrl(hreflangUrl, {
+          urlNormalized: normalize(hreflangUrl, {
             removeTrailingSlash: false,
             forceHttps: true
           }),
@@ -93,7 +144,7 @@ const discoverWithCheerio = (buffer, queueItem) => {
       queueItem.isDiscoveryProcessDone = true;
       delete queueItem.$;
       delete queueItem.plainHTML;
-    }, (error) => {
+    }, () => {
       queueItem.isDiscoveryProcessDone = true;
       delete queueItem.$;
       delete queueItem.plainHTML;
@@ -104,7 +155,7 @@ const discoverWithCheerio = (buffer, queueItem) => {
     const $ = queueItem.$;
     const html = $('a[href], link[rel="canonical"]');
 
-    // TODO: Use the maping function to handle relative URLs for alternatives;
+    // TODO: Use the mapping function to handle relative URLs for alternatives
     const links = html.map(function iteratee() {
       let href = $(this).attr('href');
       if (!href || href === '') {
@@ -131,14 +182,12 @@ const discoverWithCheerio = (buffer, queueItem) => {
         return `${queueItem.protocol}:${href}`;
       }
 
-      // check if link is relative
-      // (does not start with "http(s)" or "//")
+      // check if link is relative (does not start with "http(s)" or "//")
       if (!/^https?:\/\//.test(href)) {
         const base = $('base').first();
         if (base && base.length) {
-          // base tag is set, prepend it
           if (base.attr('href') !== undefined) {
-            // base tags sometimes don't define href, they sometimes they only set target="_top", target="_blank"
+            // base tags sometimes don't define href
             href = url.resolve(base.attr('href'), href);
           }
         }
@@ -182,19 +231,20 @@ const discoverWithCheerio = (buffer, queueItem) => {
 
   return links().get();
 };
-const getHTMLWithHeadlessBrowser = async (url) => {
+
+const getHTMLWithHeadlessBrowser = async (urlStr) => {
   const page = await browser.newPage();
   await page.setExtraHTTPHeaders({
     'Accept-Language': 'en'
   });
 
   const result = {
-    url: url,
+    url: urlStr,
     body: '',
-    endURL: url
+    endURL: urlStr
   };
   try {
-    await page.goto(url, {
+    await page.goto(urlStr, {
       waitLoad: true,
       waitNetworkIdle: true,
       timeout: 3000000
@@ -209,9 +259,11 @@ const getHTMLWithHeadlessBrowser = async (url) => {
   }
   return result;
 };
-const getHTML = async (url) => {
-  return superagent.get(url);
+
+const getHTML = async (urlStr) => {
+  return superagent.get(urlStr);
 };
+
 module.exports = (options) => {
   browser = options.browser;
   crawler = options.crawler;
