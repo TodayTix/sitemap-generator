@@ -1,6 +1,5 @@
 const Crawler = require('simplecrawler');
 const URLParser = require('url');
-const has = require('lodash/has');
 
 const discoverResources = require('./discoverResources');
 const stringifyURL = require('./helpers/stringifyURL');
@@ -60,7 +59,7 @@ module.exports = (uri, options = {}, browser) => {
   const crawler = new Crawler(uri.href);
 
   Object.keys(options).forEach(o => {
-    if (has(crawler, o)) {
+    if (Object.prototype.hasOwnProperty.call(crawler, o)) {
       crawler[o] = options[o];
     } else if (o === 'crawlerMaxDepth') {
       // eslint-disable-next-line
