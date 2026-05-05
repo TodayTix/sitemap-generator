@@ -17,7 +17,6 @@
     "crypto-random-string": "5.0.0",
     "follow-redirects": "^1.13.0",
     "https": "^1.0.0",
-    "lodash": "4.17.21",
     "mitt": "3.0.1",
     "node-translate": "0.0.4",
     "normalize-url": "8.0.0",
@@ -65,5 +64,5 @@
     "url": "git+https://github.com/hazemhagrass/advanced-sitemap-generator.git"
   },
   "scripts": {},
-  "version": "1.8.8"
+  "version": "1.8.9"
 }
