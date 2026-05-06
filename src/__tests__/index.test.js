@@ -1,7 +1,3 @@
-jest.mock('../createCrawler', () =>
-  jest.fn(() => ({ on: jest.fn(), start: jest.fn(), stop: jest.fn(), running: false }))
-);
-
 const SitemapGenerator = require('../index');
 
 describe('SitemapGenerator', () => {

@@ -74,7 +74,7 @@
     "testMatch": ["**/src/__tests__/**/*.test.js"]
   },
   "scripts": {
-    "test": "jest"
+    "test": "jest --forceExit"
   },
   "version": "1.8.9"
 }
