@@ -70,6 +70,11 @@
     "picomatch": "2.3.2",
     "underscore": "1.13.8"
   },
-  "scripts": {},
+  "jest": {
+    "testMatch": ["**/src/__tests__/**/*.test.js"]
+  },
+  "scripts": {
+    "test": "jest"
+  },
   "version": "1.8.9"
 }
