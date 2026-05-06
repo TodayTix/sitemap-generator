@@ -199,9 +199,6 @@ module.exports = function SitemapGenerator(uri, opts) {
   );
   const sitemapPath = path.resolve(options.filepath);
 
-  // we don't care about invalid certs
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
   const start = () => {
     crawler.start();
   };
