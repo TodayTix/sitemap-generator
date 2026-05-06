@@ -63,6 +63,13 @@
     "type": "git",
     "url": "git+https://github.com/hazemhagrass/advanced-sitemap-generator.git"
   },
+  "overrides": {
+    "basic-ftp": "6.0.1",
+    "flatted": "3.4.2",
+    "minimatch": "3.1.5",
+    "picomatch": "2.3.2",
+    "underscore": "1.13.8"
+  },
   "scripts": {},
   "version": "1.8.9"
 }
