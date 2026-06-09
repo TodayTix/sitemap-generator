@@ -61,7 +61,9 @@ module.exports = function SitemapStream(options) {
       stream.write(`\n    <changefreq>${options.changeFreq}</changefreq>`);
     }
     stream.write(`\n    <priority>${getPriorityFromDepth(queueItem.depth)}</priority>`);
-    stream.write(`\n    <lastmod>${queueItem.lastMod}</lastmod>`);
+    if (queueItem.lastMod) {
+      stream.write(`\n    <lastmod>${queueItem.lastMod}</lastmod>`);
+    }
     stream.write(`\n  </url>`);
   };
 
