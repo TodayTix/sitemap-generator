@@ -70,6 +70,8 @@
     "picomatch": "2.3.2",
     "underscore": "1.13.8"
   },
-  "scripts": {},
+  "scripts": {
+    "test": "node --test src/"
+  },
   "version": "1.8.9"
 }
