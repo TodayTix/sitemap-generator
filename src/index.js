@@ -240,9 +240,14 @@ module.exports = function SitemapGenerator(uri, opts) {
 
   const selectForcedURLsOrKeepAll = async () => {
     try {
-      return await options.selectForcedURLs(options.forcedURLs);
+      const selectedForcedURLs = await options.selectForcedURLs(options.forcedURLs);
+      if (Array.isArray(selectedForcedURLs)) {
+        return selectedForcedURLs;
+      }
+      msg.error('SELECTING FORCED URLS RETURNED NO LIST, KEEPING ALL OF THEM');
+      return options.forcedURLs;
     } catch (error) {
-      msg.error('SELECTING FORCED URLS FAILED, KEEPING ALL OF THEM: ' + error.message);
+      msg.error('SELECTING FORCED URLS FAILED, KEEPING ALL OF THEM: ' + String(error?.message ?? error));
       return options.forcedURLs;
     }
   };

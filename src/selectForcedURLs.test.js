@@ -69,6 +69,32 @@ describe('selectForcedURLs', { concurrency: true }, () => {
     }
   });
 
+  test('lists every forced URL when it rejects with something other than an Error', async () => {
+    const forcedURLs = [`${siteUrl}/forced-g`, `${siteUrl}/forced-h`];
+
+    const sitemap = await generateSitemap({
+      forcedURLs: forcedURLs.map(toForcedURL),
+      selectForcedURLs: () => Promise.reject(undefined),
+    });
+
+    for (const forcedURL of forcedURLs) {
+      assert.ok(sitemap.includes(`<loc>${forcedURL}</loc>`));
+    }
+  });
+
+  test('lists every forced URL when it resolves to something other than a list', async () => {
+    const forcedURLs = [`${siteUrl}/forced-e`, `${siteUrl}/forced-f`];
+
+    const sitemap = await generateSitemap({
+      forcedURLs: forcedURLs.map(toForcedURL),
+      selectForcedURLs: async () => undefined,
+    });
+
+    for (const forcedURL of forcedURLs) {
+      assert.ok(sitemap.includes(`<loc>${forcedURL}</loc>`));
+    }
+  });
+
   test('lists every forced URL when no selector is given', async () => {
     const forcedURLs = [`${siteUrl}/forced-c`, `${siteUrl}/forced-d`];
 
