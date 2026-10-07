@@ -96,7 +96,8 @@ module.exports = function SitemapGenerator(uri, opts) {
     decodeResponses: true,
     changeFreq: '',
     priorityMap: [],
-    forcedURLs: []
+    forcedURLs: [],
+    selectForcedURLs: (forcedURLs) => forcedURLs
   };
   if (!uri) {
     throw new Error('Requires a valid URL.');
@@ -237,13 +238,27 @@ module.exports = function SitemapGenerator(uri, opts) {
     });
   };
 
+  const selectForcedURLsOrKeepAll = async () => {
+    try {
+      const selectedForcedURLs = await options.selectForcedURLs(options.forcedURLs);
+      if (Array.isArray(selectedForcedURLs)) {
+        return selectedForcedURLs;
+      }
+      msg.error('SELECTING FORCED URLS RETURNED NO LIST, KEEPING ALL OF THEM');
+      return options.forcedURLs;
+    } catch (error) {
+      msg.error('SELECTING FORCED URLS FAILED, KEEPING ALL OF THEM: ' + String(error?.message ?? error));
+      return options.forcedURLs;
+    }
+  };
+
   const onCrawlerComplete = () => {
     let queuedItems = getQueueReadyItems();
     msg.green('CRAWLER HAS ' + queuedItems.length + ' ITEMS IN THE QUEUE');
 
-    const addBaseURLsToQueue = () => {
+    const addBaseURLsToQueue = (forcedURLs) => {
       msg.info('ADDING BASE URLS TO THE GENERATED SITEMAP');
-      for (const url of options.forcedURLs) {
+      for (const url of forcedURLs) {
         const item = {
           depth: 100,
           lastMod: '',
@@ -361,7 +376,7 @@ module.exports = function SitemapGenerator(uri, opts) {
       }
     };
 
-    const init = () => {
+    const init = async () => {
       msg.green('CRAWLER COMPLETE CRAWLING THE WEBSITE');
       const finish = () => {
         sitemap.finish();
@@ -413,7 +428,7 @@ module.exports = function SitemapGenerator(uri, opts) {
         }
       };
 
-      addBaseURLsToQueue();
+      addBaseURLsToQueue(await selectForcedURLsOrKeepAll());
       handleCanonicals();
       handleUppercaseLettersURLs();
 

@@ -71,7 +71,7 @@
     "underscore": "1.13.8"
   },
   "scripts": {
-    "test": "node --test src/"
+    "test": "node --test src/*.test.js"
   },
   "version": "1.8.9"
 }
