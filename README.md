@@ -153,6 +153,13 @@ Default: `true`
 
 Whether to deep crawl every page searching for hreflang attributes to add alternative links to the generated sitemap or not.
 
+### selectForcedURLs
+
+Type: `function`  
+Default: `(forcedURLs) => forcedURLs`
+
+Called once the crawl has finished, with the `forcedURLs` given to the generator. It returns, or resolves to, the forced URLs to add to the sitemap. The sitemap is written only after it resolves, so slow work started before the crawl, such as checking that each forced URL still loads, adds no time as long as it finishes first. If it throws or rejects, every forced URL is added.
+
 ## Events
 
 The Sitemap Generator emits several events which can be listened to.
