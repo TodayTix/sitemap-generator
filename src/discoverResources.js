@@ -60,6 +60,25 @@ function normalize(input, opts = {}) {
   return u.toString();
 }
 
+const NOINDEX_DIRECTIVE = /(^|[\s,])(noindex|none)([\s,]|$)/i;
+
+const readsAsNoindex = ($) =>
+  $('meta[name="robots" i], meta[name="googlebot" i]')
+    .toArray()
+    .some((metaTag) => NOINDEX_DIRECTIVE.test($(metaTag).attr('content') || ''));
+
+const resolveCanonicalUrl = ($, pageUrl) => {
+  const canonicalHref = $('link[rel="canonical"]').first().attr('href');
+  if (!canonicalHref) {
+    return '';
+  }
+  try {
+    return new URL(canonicalHref.trim(), pageUrl).href;
+  } catch (_) {
+    return '';
+  }
+};
+
 const guessItemLanguage = (queueItem) => {
   const $ = queueItem.$;
   const init = (resolve, reject) => {
@@ -94,6 +113,8 @@ const discoverWithCheerio = (buffer, queueItem) => {
   queueItem.isDiscoveryProcessDone = false;
 
   const $ = queueItem.$;
+  queueItem.isNoindex = readsAsNoindex($);
+  queueItem.canonicalUrl = resolveCanonicalUrl($, queueItem.url);
   const metaRobots = $('meta[name="robots"]');
 
   if (

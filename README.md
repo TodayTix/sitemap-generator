@@ -160,6 +160,13 @@ Default: `(forcedURLs) => forcedURLs`
 
 Called once the crawl has finished, with the `forcedURLs` given to the generator. It returns, or resolves to, the forced URLs to add to the sitemap. The sitemap is written only after it resolves, so slow work started before the crawl, such as checking that each forced URL still loads, adds no time as long as it finishes first. If it throws or rejects, every forced URL is added.
 
+### selectListedURLs
+
+Type: `function`  
+Default: `(queueItems) => queueItems`
+
+Called once the crawl has finished and the forced URLs are merged in, with every page about to be listed. It returns, or resolves to, the pages to keep in the sitemap. Each crawled page carries `isNoindex` (a `robots` or `googlebot` meta tag says `noindex` or `none`) and `canonicalUrl` (the page's canonical link resolved to an absolute URL, empty when it has none); a forced URL that was never fetched has neither. The URLs it leaves out are passed to `done` as `unlisted`. If it throws, rejects or returns something other than a list, every page is kept.
+
 ## Events
 
 The Sitemap Generator emits several events which can be listened to.
@@ -176,7 +183,7 @@ generator.on('add', (url) => {
 
 ### `done`
 
-Triggered when the crawler finished and the sitemap is created.
+Triggered when the crawler finished and the sitemap is created. Passes the crawl's stats, including `unlisted`: the URLs `selectListedURLs` left out.
 
 ```JavaScript
 generator.on('done', () => {

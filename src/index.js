@@ -97,7 +97,8 @@ module.exports = function SitemapGenerator(uri, opts) {
     changeFreq: '',
     priorityMap: [],
     forcedURLs: [],
-    selectForcedURLs: (forcedURLs) => forcedURLs
+    selectForcedURLs: (forcedURLs) => forcedURLs,
+    selectListedURLs: (queueItems) => queueItems
   };
   if (!uri) {
     throw new Error('Requires a valid URL.');
@@ -109,6 +110,7 @@ module.exports = function SitemapGenerator(uri, opts) {
   let savedOnDiskSitemapPaths = [];
 
   let crawler = null;
+  let unlistedURLs = [];
 
   const stats = {
     add: 0,
@@ -176,6 +178,7 @@ module.exports = function SitemapGenerator(uri, opts) {
       ignored: stats.ignore || 0,
       errored: stats.error || 0,
       urls: queuedItems,
+      unlisted: unlistedURLs,
       realCrawlingDepth: realCrawlingDepth
     };
     return results;
@@ -252,17 +255,38 @@ module.exports = function SitemapGenerator(uri, opts) {
     }
   };
 
+  const selectListedItemsOrKeepAll = async (queueItems) => {
+    try {
+      const selectedItems = await options.selectListedURLs(queueItems);
+      if (Array.isArray(selectedItems)) {
+        return selectedItems;
+      }
+      msg.error('SELECTING LISTED URLS RETURNED NO LIST, KEEPING ALL OF THEM');
+    } catch (error) {
+      msg.error('SELECTING LISTED URLS FAILED, KEEPING ALL OF THEM: ' + String(error?.message ?? error));
+    }
+    return queueItems;
+  };
+
   const onCrawlerComplete = () => {
     let queuedItems = getQueueReadyItems();
     msg.green('CRAWLER HAS ' + queuedItems.length + ' ITEMS IN THE QUEUE');
 
     const addBaseURLsToQueue = (forcedURLs) => {
       msg.info('ADDING BASE URLS TO THE GENERATED SITEMAP');
+      const fetchedItemsByURL = new Map(
+        crawler.queue
+          .filter((queueItem) => queueItem.isNoindex !== undefined)
+          .map((queueItem) => [queueItem.url, queueItem])
+      );
       for (const url of forcedURLs) {
+        const fetchedItem = fetchedItemsByURL.get(url.value);
         const item = {
           depth: 100,
           lastMod: '',
           url: url.value,
+          isNoindex: fetchedItem?.isNoindex,
+          canonicalUrl: fetchedItem?.canonicalUrl,
           urlNormalized: normalize(url.value, {
             removeTrailingSlash: false,
             forceHttps: true
@@ -436,6 +460,12 @@ module.exports = function SitemapGenerator(uri, opts) {
       queuedItems = queuedItems.filter((item) => {
         return !item.shouldBeDelete;
       });
+      const itemsBeforeSelection = queuedItems;
+      queuedItems = await selectListedItemsOrKeepAll(itemsBeforeSelection);
+      const listedURLSet = new Set(queuedItems.map((item) => item.url));
+      unlistedURLs = itemsBeforeSelection
+        .map((item) => item.url)
+        .filter((url) => !listedURLSet.has(url));
       if (options.recommendAlternatives) {
         recommendAlternatives();
       }
