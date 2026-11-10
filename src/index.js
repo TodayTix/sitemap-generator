@@ -268,6 +268,14 @@ module.exports = function SitemapGenerator(uri, opts) {
     return queueItems;
   };
 
+  const toLookupKey = (url) => {
+    try {
+      return decodeURI(url);
+    } catch (_) {
+      return url;
+    }
+  };
+
   const onCrawlerComplete = () => {
     let queuedItems = getQueueReadyItems();
     msg.green('CRAWLER HAS ' + queuedItems.length + ' ITEMS IN THE QUEUE');
@@ -277,10 +285,10 @@ module.exports = function SitemapGenerator(uri, opts) {
       const fetchedItemsByURL = new Map(
         crawler.queue
           .filter((queueItem) => queueItem.isNoindex !== undefined)
-          .map((queueItem) => [queueItem.url, queueItem])
+          .map((queueItem) => [toLookupKey(queueItem.url), queueItem])
       );
       for (const url of forcedURLs) {
-        const fetchedItem = fetchedItemsByURL.get(url.value);
+        const fetchedItem = fetchedItemsByURL.get(toLookupKey(url.value));
         const item = {
           depth: 100,
           lastMod: '',

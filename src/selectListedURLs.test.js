@@ -26,6 +26,8 @@ const pagesByPath = () => ({
       'canonical-relative',
       'canonical-itself',
       'canonical-off-site',
+      'robots-spaced-value',
+      "it's-a-page",
     ]
       .map(page => `<a href="/${page}">${page}</a>`)
       .join('')
@@ -39,6 +41,8 @@ const pagesByPath = () => ({
   '/canonical-elsewhere': pageWithHead(`<link rel="canonical" href="${siteUrl}/plain">`),
   '/canonical-relative': pageWithHead('<link rel="canonical" href="/plain">'),
   '/canonical-itself': pageWithHead(`<link rel="canonical" href="${siteUrl}/canonical-itself">`),
+  '/robots-spaced-value': pageWithHead('<meta name="robots" content="index, max-image-preview: none">'),
+  '/it%27s-a-page': pageWithHead(`<link rel="canonical" href="${siteUrl}/it's-a-page">`),
   '/canonical-off-site': pageWithHead('<link rel="canonical" href="https://elsewhere.example/x">'),
 });
 
@@ -87,6 +91,7 @@ describe('selectListedURLs', { concurrency: true }, () => {
     assert.strictEqual(byPath['/noindex-follow'].isNoindex, true);
     assert.strictEqual(byPath['/googlebot-none'].isNoindex, true);
     assert.strictEqual(byPath['/robots-index'].isNoindex, false);
+    assert.strictEqual(byPath['/robots-spaced-value'].isNoindex, false);
     assert.strictEqual(byPath['/plain'].isNoindex, false);
     assert.strictEqual(byPath['/plain'].canonicalUrl, '');
     assert.strictEqual(byPath['/canonical-relative'].canonicalUrl, `${siteUrl}/plain`);
@@ -112,6 +117,22 @@ describe('selectListedURLs', { concurrency: true }, () => {
       stats.unlisted.map(url => url.replace(siteUrl, '')).sort(),
       ['/googlebot-none', '/noindex', '/noindex-follow']
     );
+  });
+
+  test('finds a forced URL the crawl fetched even when the two spell its characters differently', async () => {
+    const forcedUrl = `${siteUrl}/noindex-nofollow`;
+    const encodedForcedUrl = forcedUrl.replace('nofollow', 'nofol%6Cow');
+    let seenForcedItem;
+
+    await generateSitemap({
+      forcedURLs: [{ value: encodedForcedUrl, alternatives: [] }],
+      selectListedURLs: items => {
+        seenForcedItem = items.find(item => item.url === encodedForcedUrl);
+        return items;
+      },
+    });
+
+    assert.strictEqual(seenForcedItem.isNoindex, true);
   });
 
   test('lets a forced URL that was never fetched through the same selector', async () => {

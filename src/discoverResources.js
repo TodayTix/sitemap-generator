@@ -60,12 +60,20 @@ function normalize(input, opts = {}) {
   return u.toString();
 }
 
-const NOINDEX_DIRECTIVE = /(^|[\s,])(noindex|none)([\s,]|$)/i;
+const NOINDEX_WORDS = ['noindex', 'none'];
 
 const readsAsNoindex = ($) =>
   $('meta[name="robots" i], meta[name="googlebot" i]')
     .toArray()
-    .some((metaTag) => NOINDEX_DIRECTIVE.test($(metaTag).attr('content') || ''));
+    .some((metaTag) =>
+      ($(metaTag).attr('content') || '')
+        .toLowerCase()
+        .split(',')
+        .filter((directive) => !directive.includes(':'))
+        .some((directive) =>
+          directive.split(/\s+/).some((word) => NOINDEX_WORDS.includes(word))
+        )
+    );
 
 const resolveCanonicalUrl = ($, pageUrl) => {
   const canonicalHref = $('link[rel="canonical"]').first().attr('href');
