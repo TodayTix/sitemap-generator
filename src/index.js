@@ -97,7 +97,8 @@ module.exports = function SitemapGenerator(uri, opts) {
     changeFreq: '',
     priorityMap: [],
     forcedURLs: [],
-    selectForcedURLs: (forcedURLs) => forcedURLs
+    selectForcedURLs: (forcedURLs) => forcedURLs,
+    selectListedURLs: (queueItems) => queueItems
   };
   if (!uri) {
     throw new Error('Requires a valid URL.');
@@ -109,6 +110,7 @@ module.exports = function SitemapGenerator(uri, opts) {
   let savedOnDiskSitemapPaths = [];
 
   let crawler = null;
+  let unlistedURLs = [];
 
   const stats = {
     add: 0,
@@ -176,6 +178,7 @@ module.exports = function SitemapGenerator(uri, opts) {
       ignored: stats.ignore || 0,
       errored: stats.error || 0,
       urls: queuedItems,
+      unlisted: unlistedURLs,
       realCrawlingDepth: realCrawlingDepth
     };
     return results;
@@ -238,17 +241,24 @@ module.exports = function SitemapGenerator(uri, opts) {
     });
   };
 
-  const selectForcedURLsOrKeepAll = async () => {
+  const selectOrKeepAll = async (select, items, label) => {
     try {
-      const selectedForcedURLs = await options.selectForcedURLs(options.forcedURLs);
-      if (Array.isArray(selectedForcedURLs)) {
-        return selectedForcedURLs;
+      const selectedItems = await select(items);
+      if (Array.isArray(selectedItems)) {
+        return selectedItems;
       }
-      msg.error('SELECTING FORCED URLS RETURNED NO LIST, KEEPING ALL OF THEM');
-      return options.forcedURLs;
+      msg.error('SELECTING ' + label + ' RETURNED NO LIST, KEEPING ALL OF THEM');
     } catch (error) {
-      msg.error('SELECTING FORCED URLS FAILED, KEEPING ALL OF THEM: ' + String(error?.message ?? error));
-      return options.forcedURLs;
+      msg.error('SELECTING ' + label + ' FAILED, KEEPING ALL OF THEM: ' + String(error?.message ?? error));
+    }
+    return items;
+  };
+
+  const toLookupKey = (url) => {
+    try {
+      return decodeURI(url);
+    } catch (_) {
+      return url;
     }
   };
 
@@ -258,11 +268,19 @@ module.exports = function SitemapGenerator(uri, opts) {
 
     const addBaseURLsToQueue = (forcedURLs) => {
       msg.info('ADDING BASE URLS TO THE GENERATED SITEMAP');
+      const fetchedItemsByURL = new Map(
+        crawler.queue
+          .filter((queueItem) => queueItem.isNoindex !== undefined)
+          .map((queueItem) => [toLookupKey(queueItem.url), queueItem])
+      );
       for (const url of forcedURLs) {
+        const fetchedItem = fetchedItemsByURL.get(toLookupKey(url.value));
         const item = {
           depth: 100,
           lastMod: '',
           url: url.value,
+          isNoindex: fetchedItem?.isNoindex,
+          absoluteCanonicalUrl: fetchedItem?.absoluteCanonicalUrl,
           urlNormalized: normalize(url.value, {
             removeTrailingSlash: false,
             forceHttps: true
@@ -428,7 +446,7 @@ module.exports = function SitemapGenerator(uri, opts) {
         }
       };
 
-      addBaseURLsToQueue(await selectForcedURLsOrKeepAll());
+      addBaseURLsToQueue(await selectOrKeepAll(options.selectForcedURLs, options.forcedURLs, 'FORCED URLS'));
       handleCanonicals();
       handleUppercaseLettersURLs();
 
@@ -436,6 +454,12 @@ module.exports = function SitemapGenerator(uri, opts) {
       queuedItems = queuedItems.filter((item) => {
         return !item.shouldBeDelete;
       });
+      const itemsBeforeSelection = queuedItems;
+      queuedItems = await selectOrKeepAll(options.selectListedURLs, itemsBeforeSelection, 'LISTED URLS');
+      const listedURLSet = new Set(queuedItems.map((item) => item.url));
+      unlistedURLs = itemsBeforeSelection
+        .map((item) => item.url)
+        .filter((url) => !listedURLSet.has(url));
       if (options.recommendAlternatives) {
         recommendAlternatives();
       }
