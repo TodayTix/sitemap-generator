@@ -165,7 +165,7 @@ Called once the crawl has finished, with the `forcedURLs` given to the generator
 Type: `function`  
 Default: `(queueItems) => queueItems`
 
-Called once the crawl has finished and the forced URLs are merged in, with every page about to be listed. It returns, or resolves to, the pages to keep in the sitemap. Each crawled page carries `isNoindex` (a `robots` or `googlebot` meta tag says `noindex` or `none`) and `canonicalUrl` (the page's canonical link resolved to an absolute URL, empty when it has none); a forced URL that was never fetched has neither. The URLs it leaves out are passed to `done` as `unlisted`. If it throws, rejects or returns something other than a list, every page is kept.
+Called once the crawl has finished and the forced URLs are merged in, with every page about to be listed. It returns, or resolves to, the pages to keep in the sitemap. Each crawled page carries `isNoindex` (a `robots` or `googlebot` meta tag says `noindex` or `none`) and `absoluteCanonicalUrl` (the page's canonical link resolved to an absolute URL, empty when it has none); a forced URL that was never fetched has neither. The URLs it leaves out are passed to `done` as `unlisted`. If it throws, rejects or returns something other than a list, every page is kept.
 
 ## Events
 

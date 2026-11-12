@@ -93,10 +93,10 @@ describe('selectListedURLs', { concurrency: true }, () => {
     assert.strictEqual(byPath['/robots-index'].isNoindex, false);
     assert.strictEqual(byPath['/robots-spaced-value'].isNoindex, false);
     assert.strictEqual(byPath['/plain'].isNoindex, false);
-    assert.strictEqual(byPath['/plain'].canonicalUrl, '');
-    assert.strictEqual(byPath['/canonical-relative'].canonicalUrl, `${siteUrl}/plain`);
-    assert.strictEqual(byPath['/canonical-itself'].canonicalUrl, `${siteUrl}/canonical-itself`);
-    assert.strictEqual(byPath['/canonical-off-site'].canonicalUrl, 'https://elsewhere.example/x');
+    assert.strictEqual(byPath['/plain'].absoluteCanonicalUrl, '');
+    assert.strictEqual(byPath['/canonical-relative'].absoluteCanonicalUrl, `${siteUrl}/plain`);
+    assert.strictEqual(byPath['/canonical-itself'].absoluteCanonicalUrl, `${siteUrl}/canonical-itself`);
+    assert.strictEqual(byPath['/canonical-off-site'].absoluteCanonicalUrl, 'https://elsewhere.example/x');
   });
 
   test('lists only the pages it keeps, waiting for it to resolve, and reports the rest as unlisted', async () => {
@@ -150,7 +150,7 @@ describe('selectListedURLs', { concurrency: true }, () => {
     assert.ok(sitemap.includes(`<loc>${forcedUrl}</loc>`));
     assert.strictEqual(seenForcedItems.length, 1);
     assert.strictEqual(seenForcedItems[0].isNoindex, undefined);
-    assert.strictEqual(seenForcedItems[0].canonicalUrl, undefined);
+    assert.strictEqual(seenForcedItems[0].absoluteCanonicalUrl, undefined);
   });
 
   test('tells it a forced URL is noindex when the crawl fetched that page but never finished with it', async () => {

@@ -241,31 +241,17 @@ module.exports = function SitemapGenerator(uri, opts) {
     });
   };
 
-  const selectForcedURLsOrKeepAll = async () => {
+  const selectOrKeepAll = async (select, items, label) => {
     try {
-      const selectedForcedURLs = await options.selectForcedURLs(options.forcedURLs);
-      if (Array.isArray(selectedForcedURLs)) {
-        return selectedForcedURLs;
-      }
-      msg.error('SELECTING FORCED URLS RETURNED NO LIST, KEEPING ALL OF THEM');
-      return options.forcedURLs;
-    } catch (error) {
-      msg.error('SELECTING FORCED URLS FAILED, KEEPING ALL OF THEM: ' + String(error?.message ?? error));
-      return options.forcedURLs;
-    }
-  };
-
-  const selectListedItemsOrKeepAll = async (queueItems) => {
-    try {
-      const selectedItems = await options.selectListedURLs(queueItems);
+      const selectedItems = await select(items);
       if (Array.isArray(selectedItems)) {
         return selectedItems;
       }
-      msg.error('SELECTING LISTED URLS RETURNED NO LIST, KEEPING ALL OF THEM');
+      msg.error('SELECTING ' + label + ' RETURNED NO LIST, KEEPING ALL OF THEM');
     } catch (error) {
-      msg.error('SELECTING LISTED URLS FAILED, KEEPING ALL OF THEM: ' + String(error?.message ?? error));
+      msg.error('SELECTING ' + label + ' FAILED, KEEPING ALL OF THEM: ' + String(error?.message ?? error));
     }
-    return queueItems;
+    return items;
   };
 
   const toLookupKey = (url) => {
@@ -294,7 +280,7 @@ module.exports = function SitemapGenerator(uri, opts) {
           lastMod: '',
           url: url.value,
           isNoindex: fetchedItem?.isNoindex,
-          canonicalUrl: fetchedItem?.canonicalUrl,
+          absoluteCanonicalUrl: fetchedItem?.absoluteCanonicalUrl,
           urlNormalized: normalize(url.value, {
             removeTrailingSlash: false,
             forceHttps: true
@@ -460,7 +446,7 @@ module.exports = function SitemapGenerator(uri, opts) {
         }
       };
 
-      addBaseURLsToQueue(await selectForcedURLsOrKeepAll());
+      addBaseURLsToQueue(await selectOrKeepAll(options.selectForcedURLs, options.forcedURLs, 'FORCED URLS'));
       handleCanonicals();
       handleUppercaseLettersURLs();
 
@@ -469,7 +455,7 @@ module.exports = function SitemapGenerator(uri, opts) {
         return !item.shouldBeDelete;
       });
       const itemsBeforeSelection = queuedItems;
-      queuedItems = await selectListedItemsOrKeepAll(itemsBeforeSelection);
+      queuedItems = await selectOrKeepAll(options.selectListedURLs, itemsBeforeSelection, 'LISTED URLS');
       const listedURLSet = new Set(queuedItems.map((item) => item.url));
       unlistedURLs = itemsBeforeSelection
         .map((item) => item.url)

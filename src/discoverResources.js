@@ -122,7 +122,7 @@ const discoverWithCheerio = (buffer, queueItem) => {
 
   const $ = queueItem.$;
   queueItem.isNoindex = readsAsNoindex($);
-  queueItem.canonicalUrl = resolveCanonicalUrl($, queueItem.url);
+  queueItem.absoluteCanonicalUrl = resolveCanonicalUrl($, queueItem.url);
   const metaRobots = $('meta[name="robots"]');
 
   if (
